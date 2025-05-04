@@ -1,0 +1,223 @@
+body {
+  font-family: sans-serif;
+  line-height: 1.6;
+  margin: 0;
+  padding: 0;
+  background-color: #f4f4f4;
+  color: #333;
+}
+
+header {
+  background-color: #333;
+  color: #fff;
+  padding: 1rem 0;
+  text-align: center;
+}
+
+header h1 {
+  margin: 0;
+  padding-bottom: 0.5rem;
+}
+
+#last-updated {
+  font-size: 0.8em;
+  color: #ccc;
+}
+
+main {
+  padding: 1rem;
+  max-width: 1200px;
+  margin: 1rem auto;
+}
+
+section {
+  background-color: #fff;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+  border-radius: 5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+h2 {
+  color: #333;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 0.5rem;
+  margin-top: 0;
+}
+
+/* --- Monitored Hosts Table Styling --- */
+#monitored-hosts-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+#monitored-hosts-table th,
+#monitored-hosts-table td {
+  padding: 0.8rem;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+#monitored-hosts-table th {
+  background-color: #f2f2f2;
+  font-weight: bold;
+  color: #555;
+}
+
+#monitored-hosts-table tbody tr:hover {
+  background-color: #f9f9f9;
+}
+
+.host-row {
+  cursor: pointer; /* Indicate clickable row */
+}
+
+.host-row .status-cell {
+  width: 50px; /* Fixed width for status icon */
+  text-align: center;
+}
+
+.host-row .status-indicator {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%; /* Circular indicator */
+  vertical-align: middle;
+}
+
+.host-row .error-cell {
+  font-size: 0.9em;
+  color: #d9534f;
+  white-space: pre-wrap; /* Keep formatting */
+  word-break: break-word;
+}
+
+/* --- Expandable GPU Details Row --- */
+.gpu-details-row {
+  background-color: #f9f9f9;
+}
+
+.gpu-details-row.hidden {
+  display: none; /* Hide by default */
+}
+
+.gpu-details-cell {
+  padding: 1rem;
+}
+
+.gpu-details-content {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.gpu-detail-card {
+  border: 1px dashed #ccc;
+  padding: 0.8rem;
+  border-radius: 3px;
+  background-color: #fff;
+}
+
+.gpu-detail-card h4 {
+  margin: 0 0 0.3rem 0;
+  font-size: 1em;
+  color: #444;
+}
+
+.gpu-detail-card h5 {
+  margin: 0.5rem 0 0.2rem 0;
+  font-size: 0.9em;
+  color: #666;
+}
+
+.gpu-processes ul {
+  list-style-type: none;
+  padding-left: 0;
+  margin: 0;
+  font-size: 0.85em;
+}
+
+.gpu-processes li {
+  margin-bottom: 0.2rem;
+  color: #777;
+}
+
+/* --- Jump Host Status (Simplified Styling) --- */
+#jump-host-status {
+  margin-bottom: 1rem; /* Space below the status */
+  padding: 0.5rem 0; /* Reduced padding */
+  border: none; /* Remove border */
+  background-color: transparent; /* Remove background */
+  box-shadow: none; /* Remove shadow */
+  display: flex; /* Use flexbox for layout */
+  align-items: center; /* Vertically align items */
+  gap: 10px; /* Space between items */
+  font-size: 1.1em; /* Slightly larger font */
+}
+
+#jump-host-status .hostname {
+  font-weight: bold;
+  /* display: inline; */ /* Already inline with flex */
+  margin-bottom: 0; /* Remove margin */
+}
+
+#jump-host-status .status-indicator {
+  padding: 0; /* Remove padding */
+  background-color: transparent; /* Remove background color */
+}
+
+#jump-host-status .details {
+  font-size: 0.9em;
+  color: #555;
+  margin-top: 0; /* Remove margin */
+  border-top: none; /* Remove border */
+  padding-top: 0; /* Remove padding */
+  flex-grow: 1; /* Allow details to take available space */
+}
+
+#jump-host-status .error-message {
+  color: #d9534f;
+  font-weight: normal; /* Less bold for errors here */
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Keep existing .host-card styles for potential future use or if other elements use it */
+/* --- Original .host-card styles (kept but not applied to #jump-host-status) --- */
+.host-card {
+  /* border: 1px solid #ddd; */
+  /* border-radius: 4px; */
+  /* padding: 1rem; */
+  /* background-color: #fff; */
+  /* transition: border-color 0.3s ease; */
+}
+
+/* Status Indicator Colors (for both card and table) */
+.status-up .status-indicator {
+  background-color: #5cb85c; /* Green */
+}
+
+.status-down .status-indicator {
+  background-color: #d9534f; /* Red */
+}
+
+.status-error .status-indicator {
+  background-color: #f0ad4e; /* Orange */
+}
+
+.status-checking .status-indicator {
+  background-color: #aaa; /* Gray */
+}
+
+.status-skipped .status-indicator {
+  background-color: #ccc; /* Light Gray */
+}
+
+footer {
+  text-align: center;
+  margin-top: 2rem;
+  padding: 1rem;
+  font-size: 0.8em;
+  color: #777;
+}

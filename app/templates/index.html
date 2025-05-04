@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Imagine Watcher</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header>
+        <h1>Imagine Watcher</h1>
+        <div id="last-updated">Last updated: Never</div>
+    </header>
+
+    <main>
+        <div id="jump-host-status" class="host-card status-checking">
+            <span class="hostname">Loading...</span>
+            <span class="status-indicator">Checking...</span>
+            <div class="details">
+                <p class="error-message"></p>
+                <!-- Jump host metrics could be added here if needed -->
+            </div>
+        </div>
+
+        <section id="monitored-hosts-section">
+            <h2>Monitored Hosts</h2>
+            <table id="monitored-hosts-table">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Hostname</th>
+                        <th>CPU Usage</th>
+                        <th>Memory Usage</th>
+                        <th>GPUs</th>
+                        <th>Errors</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Monitored host rows will be dynamically inserted here -->
+                    <tr>
+                        <td colspan="6">Loading monitored hosts...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+    </main>
+
+    <footer>
+        <p>Auto-refreshing every minute</p>
+    <!-- Template for a monitored host table row (used by JavaScript) -->
+    <template id="host-row-template">
+        <tr class="host-row">
+            <td class="status-cell"><span class="status-indicator"></span></td>
+            <td class="hostname-cell"></td>
+            <td class="cpu-cell"></td>
+            <td class="memory-cell"></td>
+            <td class="gpu-count-cell"></td>
+            <td class="error-cell"></td>
+        </tr>
+        <!-- Row for expandable GPU details -->
+        <tr class="gpu-details-row hidden">
+            <td colspan="6" class="gpu-details-cell">
+                <div class="gpu-details-content">
+                    <!-- GPU info will be inserted here -->
+                </div>
+            </td>
+        </tr>
+    </template>
+
+    <!-- Template for GPU info within the expandable row (used by JavaScript) -->
+    <template id="gpu-detail-template">
+        <div class="gpu-detail-card">
+            <h4>GPU <span class="gpu-index"></span>: <span class="gpu-name"></span></h4>
+            <p>Util: <span class="gpu-util">N/A</span>% | Mem: <span class="gpu-mem-used">N/A</span> / <span class="gpu-mem-total">N/A</span> GiB</p> <!-- Changed to GiB -->
+            <div class="gpu-processes">
+                <h5>Processes:</h5>
+                <ul></ul>
+            </div>
+        </div>
+    </template>
+
+     <!-- Template for GPU process (used by JavaScript) -->
+     <template id="gpu-process-template">
+        <li>PID: <span class="proc-pid"></span> (<span class="proc-cmd"></span>) - <span class="proc-mem"></span> MiB</li>
+    </template>
+
+    <script src="/static/js/script.js"></script>
+</body>
+</html>
