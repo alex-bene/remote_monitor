@@ -18,6 +18,8 @@ cryptography==44.0.3
     # via asyncssh
 fastapi==0.115.12
     # via remote-monitor (pyproject.toml)
+gunicorn==23.0.0
+    # via remote-monitor (pyproject.toml)
 h11==0.16.0
     # via uvicorn
 idna==3.10
@@ -26,6 +28,8 @@ jinja2==3.1.6
     # via remote-monitor (pyproject.toml)
 markupsafe==3.0.2
     # via jinja2
+packaging==25.0
+    # via gunicorn
 pycparser==2.22
     # via cffi
 pydantic==2.11.4

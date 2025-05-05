@@ -13,4 +13,5 @@ dependencies = [
     "uvicorn>=0.34.2",
     "asyncssh>=2.14.2",     # Added for SSH connections
     "python-dotenv>=1.0.0", # Added to load .env file for local dev
+    "gunicorn>=23.0.0",
 ]
