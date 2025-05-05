@@ -3,7 +3,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const MIB_TO_GIB = 1024; // Conversion factor
 
   // DOM Elements
-  const lastUpdatedElem = document.getElementById("last-updated");
+  // const lastUpdatedElem = document.getElementById("last-updated"); // No longer needed for the whole div
+  const timestampValueElem = document.getElementById("timestamp-value"); // Get the specific span for the timestamp
   const jumpHostCard = document.getElementById("jump-host-status");
   const monitoredHostsTableBody = document.querySelector("#monitored-hosts-table tbody");
 
@@ -17,7 +18,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateTimestamp() {
     const now = new Date();
-    lastUpdatedElem.textContent = `Last updated: ${now.toLocaleTimeString()}`;
+    if (timestampValueElem) {
+      timestampValueElem.textContent = now.toLocaleTimeString(); // Update only the timestamp value
+    }
   }
 
   function clearContainer(container) {
@@ -110,51 +113,70 @@ document.addEventListener("DOMContentLoaded", () => {
     return [row, gpuDetailsRow]; // Return both rows
   }
 
+  // Function to populate the content of a GPU details row
+  function populateGpuDetailsContent(contentDiv, gpus) {
+    clearContainer(contentDiv); // Clear previous content
+    if (gpus && gpus.length > 0) {
+      // Use a container that allows for preformatted text or similar styling
+      const gpuListContainer = document.createElement("div"); // Or maybe 'pre' if styling dictates
+      gpuListContainer.classList.add("gpu-info-list"); // Add a class for styling
+
+      gpus.forEach((gpu) => {
+        // --- Create GPU Header Line ---
+        const headerLine = document.createElement("div");
+        headerLine.classList.add("gpu-header-line");
+        // Format: [idx] name | temp°C, util% | powerW / limitW | mem MiB / total MiB
+        headerLine.textContent = `[${gpu.index}] ${gpu.name} | ${gpu.temperature_gpu}°C, ${
+          gpu.utilization_gpu_percent
+        }%, ${gpu.power_draw.toFixed(0)}W / ${gpu.power_limit.toFixed(0)}W | ${gpu.memory_used_mib} / ${
+          gpu.memory_total_mib
+        } MiB`;
+        gpuListContainer.appendChild(headerLine);
+
+        // --- Create Process List ---
+        const processList = document.createElement("ul");
+        processList.classList.add("gpu-process-list"); // Add class for styling
+
+        if (gpu.processes && gpu.processes.length > 0) {
+          gpu.processes.forEach((proc) => {
+            const processItem = document.createElement("li");
+            // Format: └─ pid (mem MiB): command
+            processItem.innerHTML = `<span class="process-indent"> └─</span> ${proc.pid} (<span class="proc-mem">${proc.used_gpu_memory_mib} MiB</span>): <span class="proc-cmd">${proc.command}</span>`;
+            processList.appendChild(processItem);
+          });
+        } else {
+          // Optionally show a "no processes" line, indented
+          const noProcessItem = document.createElement("li");
+          noProcessItem.innerHTML = `<span class="process-indent"> └─</span> No processes found.`;
+          noProcessItem.classList.add("no-processes"); // Class for potential styling
+          processList.appendChild(noProcessItem);
+        }
+        gpuListContainer.appendChild(processList);
+      });
+      contentDiv.appendChild(gpuListContainer); // Add the full list container
+    } else {
+      contentDiv.innerHTML = "<p>No GPU information available.</p>";
+    }
+  }
+
   function toggleGpuDetails(hostname, gpus) {
     const detailsRow = document.querySelector(`.gpu-details-row[data-hostname="${hostname}"]`);
     const contentDiv = detailsRow.querySelector(".gpu-details-content");
+    const hostRow = detailsRow.previousElementSibling; // Get the host row element
 
     if (expandedRows.has(hostname)) {
       // Hide details
       detailsRow.classList.add("hidden");
       expandedRows.delete(hostname);
       clearContainer(contentDiv); // Clear content when hidden
+      if (hostRow) hostRow.classList.remove("no-bottom-border"); // Remove class when hidden
     } else {
       // Show details
       detailsRow.classList.remove("hidden");
       expandedRows.add(hostname);
-
-      // Populate GPU details content
-      clearContainer(contentDiv); // Clear previous content
-      if (gpus && gpus.length > 0) {
-        gpus.forEach((gpu) => {
-          const gpuDetailCard = gpuDetailTemplate.content.cloneNode(true).querySelector(".gpu-detail-card");
-          gpuDetailCard.querySelector(".gpu-index").textContent = gpu.index;
-          gpuDetailCard.querySelector(".gpu-name").textContent = gpu.name;
-          gpuDetailCard.querySelector(".gpu-util").textContent = gpu.utilization_gpu_percent;
-          // Convert GPU memory to GiB for display
-          gpuDetailCard.querySelector(".gpu-mem-used").textContent = (gpu.memory_used_mib / MIB_TO_GIB).toFixed(1);
-          gpuDetailCard.querySelector(".gpu-mem-total").textContent = (gpu.memory_total_mib / MIB_TO_GIB).toFixed(1);
-
-          const processList = gpuDetailCard.querySelector(".gpu-processes ul");
-          clearContainer(processList); // Clear previous processes in template clone
-
-          if (gpu.processes && gpu.processes.length > 0) {
-            gpu.processes.forEach((proc) => {
-              const processItem = gpuProcessTemplate.content.cloneNode(true).querySelector("li");
-              processItem.querySelector(".proc-pid").textContent = proc.pid;
-              processItem.querySelector(".proc-cmd").textContent = proc.command;
-              processItem.querySelector(".proc-mem").textContent = proc.used_gpu_memory_mib; // Keep process memory in MiB
-              processList.appendChild(processItem);
-            });
-          } else {
-            processList.innerHTML = "<li>No processes running on this GPU.</li>";
-          }
-          contentDiv.appendChild(gpuDetailCard);
-        });
-      } else {
-        contentDiv.innerHTML = "<p>No GPU information available.</p>";
-      }
+      // Populate GPU details content using the new function
+      populateGpuDetailsContent(contentDiv, gpus);
+      if (hostRow) hostRow.classList.add("no-bottom-border"); // Add class when shown
     }
   }
 
@@ -162,8 +184,13 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("Status data received:", data);
     console.log("Update timestamp received:", timestamp); // Log the timestamp
 
-    // Update Jump Host
-    updateJumpHostCard(data.jump_host_status);
+    // Update Jump Host (conditionally)
+    if (data.jump_host_status) {
+      jumpHostCard.style.display = ""; // Ensure it's visible if data exists
+      updateJumpHostCard(data.jump_host_status);
+    } else {
+      jumpHostCard.style.display = "none"; // Hide if no jump host data
+    }
 
     // Update Monitored Hosts Table
     clearContainer(monitoredHostsTableBody); // Clear previous rows
@@ -173,9 +200,21 @@ document.addEventListener("DOMContentLoaded", () => {
         monitoredHostsTableBody.appendChild(hostRow);
         monitoredHostsTableBody.appendChild(gpuDetailsRow);
 
-        // If this row was previously expanded, re-expand it and populate
-        if (expandedRows.has(hostData.hostname) && hostData.gpus && hostData.gpus.length > 0) {
-          toggleGpuDetails(hostData.hostname, hostData.gpus); // This will re-show and populate
+        // If this row was previously expanded, ensure it remains visible and populated
+        if (expandedRows.has(hostData.hostname)) {
+          if (hostData.gpus && hostData.gpus.length > 0) {
+            // Manually remove 'hidden', populate content, and add border class without toggling the state
+            gpuDetailsRow.classList.remove("hidden");
+            populateGpuDetailsContent(gpuDetailsRow.querySelector(".gpu-details-content"), hostData.gpus);
+            hostRow.classList.add("no-bottom-border"); // Ensure border class is added
+          } else {
+            // If the host no longer has GPUs or data is missing, remove from expanded set
+            expandedRows.delete(hostData.hostname);
+            hostRow.classList.remove("no-bottom-border"); // Ensure border class is removed
+            // Ensure the row is hidden if it somehow wasn't already
+            gpuDetailsRow.classList.add("hidden");
+            clearContainer(gpuDetailsRow.querySelector(".gpu-details-content"));
+          }
         }
       });
     } else if (data.jump_host_status.status === "up") {
@@ -189,10 +228,14 @@ document.addEventListener("DOMContentLoaded", () => {
       try {
         const date = new Date(timestamp);
         // Format the date nicely, similar to updateTimestamp
-        lastUpdatedElem.textContent = `Last updated: ${date.toLocaleTimeString()}`;
+        if (timestampValueElem) {
+          timestampValueElem.textContent = date.toLocaleTimeString(); // Update only the timestamp value
+        }
       } catch (error) {
         console.error("Error parsing timestamp:", error);
-        lastUpdatedElem.textContent = `Last updated: Invalid Date`;
+        if (timestampValueElem) {
+          timestampValueElem.textContent = `Invalid Date`; // Update only the timestamp value
+        }
       }
     } else {
       // Fallback to current time if timestamp is not available

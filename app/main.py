@@ -9,7 +9,10 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import api  # Import the API router
+from . import (
+    api,  # Import the API router
+    config,  # Import config settings
+)
 
 # Configure basic logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -49,8 +52,9 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
 
 
 # --- App Setup ---
+# Use the title from the loaded configuration settings
 app = FastAPI(
-    title="Imagine Watcher",
+    title=config.settings.page_title,
     description="Monitors status and metrics of configured hosts via SSH.",
     version="0.1.0",
     lifespan=lifespan,
@@ -96,7 +100,8 @@ async def read_root(request: Request) -> HTMLResponse:
             status_code=500,
         )
 
-    return templates.TemplateResponse("index.html", {"request": request})
+    # Pass page_title from config settings to the template
+    return templates.TemplateResponse("index.html", {"request": request, "page_title": config.settings.page_title})
 
 
 # --- Optional: Run with Uvicorn (for development) ---

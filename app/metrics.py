@@ -13,9 +13,7 @@ CHECK_NVIDIA_SMI_CMD = "command -v nvidia-smi"
 # Using -bn1 for non-interactive mode, 1 iteration
 TOP_CMD = "top -bn1"
 # NVIDIA SMI commands for GPU and process info (CSV, no header, no units for easier parsing)
-NVIDIA_SMI_GPU_QUERY_CMD = (
-    "nvidia-smi --query-gpu=index,name,utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits"
-)
+NVIDIA_SMI_GPU_QUERY_CMD = "nvidia-smi --query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.limit,power.draw --format=csv,noheader,nounits"
 NVIDIA_SMI_PROCESS_QUERY_CMD = (
     "nvidia-smi --query-compute-apps=pid,process_name,used_gpu_memory --format=csv,noheader,nounits"
 )
@@ -89,9 +87,10 @@ def get_gpu_info(hostname: str) -> tuple[list[models.GpuInfo] | None, str | None
         return None, smi_check_error
 
     error_messages = []
-    gpu_query_output, process_query_output = None, None
+    gpu_query_output = None
+    per_gpu_process_output: dict[int, str | None] = {}  # Store process output per GPU index
 
-    # Fetch GPU query output
+    # 1. Fetch base GPU query output (indices, names, etc.)
     rc_gpu, stdout_gpu, stderr_gpu = ssh_utils.run_ssh_command(hostname, NVIDIA_SMI_GPU_QUERY_CMD)
     if rc_gpu == 0:
         gpu_query_output = stdout_gpu
@@ -99,25 +98,67 @@ def get_gpu_info(hostname: str) -> tuple[list[models.GpuInfo] | None, str | None
         msg = f"Failed to get nvidia-smi GPU query from {hostname} (rc={rc_gpu}). Stderr: {stderr_gpu or 'N/A'}"
         logger.warning(msg)
         error_messages.append(msg)
+        # If we can't get the basic GPU list, we can't proceed
+        return None, "; ".join(error_messages)
 
-    # Fetch Process query output
-    rc_proc, stdout_proc, stderr_proc = ssh_utils.run_ssh_command(hostname, NVIDIA_SMI_PROCESS_QUERY_CMD)
-    if rc_proc == 0:
-        process_query_output = stdout_proc
+    # 2. Parse GPU indices from the base query output
+    # Temporarily parse just to get indices. The full parsing happens later.
+    # IMPORTANT: This needs to expect *all* the keys returned by NVIDIA_SMI_GPU_QUERY_CMD now.
+    gpu_list_for_indices = parsers.parse_nvidia_smi_csv(
+        gpu_query_output,
+        [
+            "index",
+            "name",
+            "utilization.gpu",
+            "memory.used",
+            "memory.total",
+            "temperature.gpu",
+            "power.limit",
+            "power.draw",
+        ],
+        warn_on_empty=False,
+    )
+    gpu_indices = [gpu.get("index") for gpu in gpu_list_for_indices if gpu.get("index") is not None]
+
+    if not gpu_indices:
+        logger.info("No GPU indices found or parsed for %s. Assuming no GPUs or parse error.", hostname)
+        # Still return the base gpu_query_output for parsing later, maybe it finds GPUs without processes
     else:
-        # It's possible this fails if no GPU apps are running, check stderr
-        msg = f"Failed to get nvidia-smi process query from {hostname} (rc={rc_proc}). Stderr: {stderr_proc or 'N/A'}"
-        logger.warning(msg)
-        # Don't necessarily treat as fatal error unless stderr indicates a real problem?
-        # For now, just log and append error.
-        error_messages.append(msg)
+        logger.info("Found GPU indices for %s: %s. Querying processes per GPU...", hostname, gpu_indices)
+        # 3. Fetch Process query output *per GPU*
+        for index in gpu_indices:
+            # Construct the command for the specific GPU index
+            specific_process_cmd = (
+                f"nvidia-smi -i {index} --query-compute-apps=pid,process_name,used_gpu_memory "
+                "--format=csv,noheader,nounits"
+            )
+            rc_proc, stdout_proc, stderr_proc = ssh_utils.run_ssh_command(hostname, specific_process_cmd)
 
-    # Try parsing
-    gpu_info = parsers.parse_gpu_info(gpu_query_output, process_query_output)
+            if rc_proc == 0:
+                per_gpu_process_output[index] = stdout_proc
+                logger.debug("Successfully got process info for GPU %d on %s.", index, hostname)
+            else:
+                # Check stderr for "No running processes found" which is not a fatal error
+                no_proc_msg = "No running processes found"
+                if stderr_proc and no_proc_msg in stderr_proc:
+                    logger.info("No running processes found on GPU %d for %s.", index, hostname)
+                    per_gpu_process_output[index] = ""  # Store empty string to indicate query success but no processes
+                else:
+                    # Treat other errors as warnings/errors
+                    msg = (
+                        f"Failed to get nvidia-smi process query for GPU {index} on {hostname} "
+                        f"(rc={rc_proc}). Stderr: {stderr_proc or 'N/A'}"
+                    )
+                    logger.warning(msg)
+                    error_messages.append(msg)
+                    per_gpu_process_output[index] = None  # Indicate error for this GPU's process query
+
+    # 4. Try parsing with the base GPU output and the per-GPU process dictionary
+    gpu_info = parsers.parse_gpu_info(gpu_query_output, per_gpu_process_output)
     combined_error = "; ".join(error_messages) if error_messages else None
 
     if gpu_info:
-        logger.info("Successfully parsed GPU info for %s.", hostname)
+        logger.info("Successfully parsed combined GPU info for %s.", hostname)
     else:
         logger.warning("Could not parse GPU info for %s. Errors: %s", hostname, combined_error)
 

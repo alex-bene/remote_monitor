@@ -1,0 +1,18 @@
+# Configuration for the application
+page_title: "IMAGINE Machines Monitor" # Title displayed on the web page
+
+# The host used as a jump point to access other machines.
+# This host will be checked first. Set to null or omit if no jump host.
+jump_host: passerelle
+
+# List of hosts to monitor. Each item can be a string (for default settings)
+# or an object with 'hostname' and optional 'check_gpu' (defaulting to true).
+monitored_hosts:
+  - hostname: imagine
+    check_gpu: false # Do not check for GPUs on this host
+  - hostname: allier
+    check_gpu: true # Explicitly check for GPUs on this host
+
+# Refresh interval for fetching status updates in seconds
+refresh_interval_no_clients_sec: 3600
+refresh_interval_clients_sec: 60

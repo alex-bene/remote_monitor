@@ -17,6 +17,9 @@ class GpuInfo(BaseModel):
     utilization_gpu_percent: int = Field(..., alias="utilization.gpu")  # Alias
     memory_used_mib: int = Field(..., alias="memory.used")  # Alias
     memory_total_mib: int = Field(..., alias="memory.total")  # Alias
+    temperature_gpu: int = Field(..., alias="temperature.gpu")  # Added
+    power_limit: float = Field(..., alias="power.limit")  # Added - nvidia-smi outputs float like 250.00 W
+    power_draw: float = Field(..., alias="power.draw")  # Added - nvidia-smi outputs float like 55.50 W
     processes: list[ProcessInfo] = []
 
 
@@ -42,5 +45,5 @@ class HostStatus(BaseModel):
 class ApiResponse(BaseModel):
     """Structure of the main API response."""
 
-    jump_host_status: HostStatus
+    jump_host_status: HostStatus | None = None  # Made optional
     monitored_hosts_status: list[HostStatus]

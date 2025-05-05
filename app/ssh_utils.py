@@ -16,7 +16,7 @@ SSH_OPTIONS = [
     "-o",
     "StrictHostKeyChecking=no",
     "-o",
-    "UserKnownHostsFile=/dev/null",
+    "UserKnownHostsFile=/dev/null",  # Avoid known_hosts file interactions
 ]
 
 

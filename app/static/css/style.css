@@ -1,80 +1,112 @@
+:root {
+  --bg-color: #fafafa;
+  --text-color: #333;
+  --header-bg: #333;
+  --header-text: #fafafa;
+  --section-bg: #fefefe;
+  --table-header-bg: #f5f5f5;
+  --table-border-color: #eee;
+  --table-row-hover-bg: #fafafa;
+  --footer-bg: #f5f5f5;
+  --footer-text: #777;
+  --link-color: #007bff; /* Example link color */
+  --status-up: #5cb85c;
+  --status-down: #d9534f;
+  --status-error: #f0ad4e;
+  --status-checking: #aaa;
+  --status-skipped: #ccc;
+  --error-text-color: var(--status-down);
+  --monospace-font: "Courier New", Courier, monospace;
+}
+
 body {
-  font-family: sans-serif;
+  font-family: var(--monospace-font);
   line-height: 1.6;
   margin: 0;
   padding: 0;
-  background-color: #f4f4f4;
-  color: #333;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  display: flex; /* Enable flexbox */
+  flex-direction: column; /* Stack children vertically */
+  min-height: 100vh; /* Ensure body takes at least full viewport height */
 }
 
 header {
-  background-color: #333;
-  color: #fff;
-  padding: 1rem 0;
+  background-color: var(--header-bg);
+  color: var(--header-text);
+  padding: 1.5rem 1rem; /* Increased padding */
   text-align: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Subtle shadow */
 }
 
 header h1 {
   margin: 0;
-  padding-bottom: 0.5rem;
+  padding-bottom: 0.5rem; /* Keep as is or adjust slightly */
 }
 
 #last-updated {
-  font-size: 0.8em;
-  color: #ccc;
+  font-size: 0.9em; /* Slightly larger */
+  color: var(--status-skipped); /* Use variable */
 }
 
 main {
-  padding: 1rem;
+  padding: 1.5rem; /* Increased padding */
   max-width: 1200px;
-  margin: 1rem auto;
+  margin: 2rem auto; /* Increased top/bottom margin */
+  flex-grow: 1; /* Allow main content to expand and push footer down */
+  width: 100%; /* Ensure main takes full width within flex context */
+  box-sizing: border-box; /* Include padding in width calculation */
 }
 
 section {
-  background-color: #fff;
-  padding: 1.5rem;
-  margin-bottom: 1rem;
+  background-color: var(--section-bg);
+  padding: 2rem; /* Increased padding */
+  margin-bottom: 2rem; /* Increased margin */
   border-radius: 5px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 h2 {
-  color: #333;
-  border-bottom: 1px solid #eee;
-  padding-bottom: 0.5rem;
+  color: var(--text-color);
+  border-bottom: 1px solid var(--table-border-color);
+  padding-bottom: 0.8rem; /* Increased padding */
   margin-top: 0;
+  margin-bottom: 1.5rem; /* Added margin below h2 */
 }
 
 /* --- Monitored Hosts Table Styling --- */
 #monitored-hosts-table {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 1rem;
+  margin-top: 1.5rem; /* Increased margin */
 }
 
 #monitored-hosts-table th,
 #monitored-hosts-table td {
-  padding: 0.8rem;
-  text-align: left;
-  border-bottom: 1px solid #eee;
+  padding: 1rem 1.2rem; /* Increased padding */
+  text-align: left; /* Default, will be overridden */
+  border-bottom: 1px solid var(--table-border-color);
+  vertical-align: middle; /* Align cell content vertically */
 }
 
 #monitored-hosts-table th {
-  background-color: #f2f2f2;
+  background-color: var(--table-header-bg);
   font-weight: bold;
-  color: #555;
+  color: var(--text-color); /* Use main text color */
+  white-space: nowrap; /* Prevent headers wrapping */
 }
 
 #monitored-hosts-table tbody tr:hover {
-  background-color: #f9f9f9;
+  background-color: var(--table-row-hover-bg);
 }
 
 .host-row {
   cursor: pointer; /* Indicate clickable row */
 }
 
+/* Column Specific Alignment & Styling */
 .host-row .status-cell {
-  width: 50px; /* Fixed width for status icon */
+  width: 70px; /* Slightly wider */
   text-align: center;
 }
 
@@ -86,64 +118,91 @@ h2 {
   vertical-align: middle;
 }
 
+.host-row .hostname-cell {
+  font-weight: bold;
+  text-align: left;
+}
+
+.host-row .cpu-cell,
+.host-row .memory-cell,
+.host-row .gpu-count-cell {
+  text-align: right;
+  white-space: nowrap; /* Prevent wrapping for numerical data */
+}
+
 .host-row .error-cell {
   font-size: 0.9em;
-  color: #d9534f;
+  color: var(--error-text-color);
   white-space: pre-wrap; /* Keep formatting */
   word-break: break-word;
+  text-align: center; /* Center error messages */
+}
+
+/* Remove bottom border from host row cells when details are expanded */
+.host-row.no-bottom-border td {
+  border-bottom: none !important;
 }
 
 /* --- Expandable GPU Details Row --- */
-.gpu-details-row {
-  background-color: #f9f9f9;
-}
-
 .gpu-details-row.hidden {
   display: none; /* Hide by default */
 }
 
 .gpu-details-cell {
-  padding: 1rem;
+  padding-left: 3rem !important;
+  padding-right: 3rem !important;
 }
 
+/* --- New GPU Stat Styling --- */
 .gpu-details-content {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1rem;
+  display: block;
 }
 
-.gpu-detail-card {
-  border: 1px dashed #ccc;
-  padding: 0.8rem;
-  border-radius: 3px;
-  background-color: #fff;
-}
-
-.gpu-detail-card h4 {
-  margin: 0 0 0.3rem 0;
-  font-size: 1em;
-  color: #444;
-}
-
-.gpu-detail-card h5 {
-  margin: 0.5rem 0 0.2rem 0;
+.gpu-info-list {
   font-size: 0.9em;
-  color: #666;
+  line-height: 1.4;
+  white-space: pre; /* Preserve whitespace for alignment */
+  background-color: var(--section-bg); /* Use section bg */
+  padding: 1rem; /* Increased padding */
+  border: 1px solid var(--table-border-color);
+  border-radius: 3px;
+  color: var(--text-color); /* Ensure text color is set */
 }
 
-.gpu-processes ul {
+.gpu-header-line {
+  font-weight: bold;
+  margin-bottom: 0.2em;
+}
+
+.gpu-process-list {
   list-style-type: none;
   padding-left: 0;
-  margin: 0;
-  font-size: 0.85em;
+  margin: 0.5rem 0 0 0; /* Add some top margin */
 }
 
-.gpu-processes li {
-  margin-bottom: 0.2rem;
-  color: #777;
+.gpu-process-list li {
+  margin-left: 0; /* Adjust as needed */
+  padding-left: 0;
 }
 
-/* --- Jump Host Status (Simplified Styling) --- */
+.process-indent {
+  display: inline-block;
+  width: 2em;
+  text-align: left;
+  color: var(--footer-text); /* Use footer text color for subtlety */
+}
+
+.proc-mem,
+.proc-cmd {
+  color: var(--text-color); /* Use main text color */
+}
+
+.no-processes {
+  color: var(--footer-text); /* Use footer text color */
+  font-style: italic;
+}
+
+/* --- Jump Host Status --- */
 #jump-host-status {
   margin-bottom: 1rem; /* Space below the status */
   padding: 0.5rem 0; /* Reduced padding */
@@ -177,47 +236,65 @@ h2 {
 }
 
 #jump-host-status .error-message {
-  color: #d9534f;
-  font-weight: normal; /* Less bold for errors here */
+  color: var(--error-text-color);
+  font-weight: normal;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-/* Keep existing .host-card styles for potential future use or if other elements use it */
-/* --- Original .host-card styles (kept but not applied to #jump-host-status) --- */
-.host-card {
-  /* border: 1px solid #ddd; */
-  /* border-radius: 4px; */
-  /* padding: 1rem; */
-  /* background-color: #fff; */
-  /* transition: border-color 0.3s ease; */
-}
-
 /* Status Indicator Colors (for both card and table) */
 .status-up .status-indicator {
-  background-color: #5cb85c; /* Green */
+  background-color: var(--status-up);
 }
 
 .status-down .status-indicator {
-  background-color: #d9534f; /* Red */
+  background-color: var(--status-down);
 }
 
 .status-error .status-indicator {
-  background-color: #f0ad4e; /* Orange */
+  background-color: var(--status-error);
 }
 
 .status-checking .status-indicator {
-  background-color: #aaa; /* Gray */
+  background-color: var(--status-checking);
 }
 
 .status-skipped .status-indicator {
-  background-color: #ccc; /* Light Gray */
+  background-color: var(--status-skipped);
 }
 
 footer {
-  text-align: center;
-  margin-top: 2rem;
-  padding: 1rem;
-  font-size: 0.8em;
-  color: #777;
+  margin-top: 3rem; /* Increased margin */
+  padding: 1.5rem 1rem; /* Increased padding */
+  font-size: 0.9em; /* Base size for footer */
+  color: var(--footer-text);
+  background-color: var(--footer-bg);
+  border-top: 1px solid var(--table-border-color); /* Use variable */
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.footer-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px; /* Space between icon and text */
+  text-align: left; /* Align text to the left */
+}
+
+.github-icon {
+  height: 24px; /* Match previous SVG height */
+  width: auto; /* Maintain aspect ratio */
+  vertical-align: middle; /* Align with text */
+  transition: opacity 0.2s ease-in-out;
+}
+
+.github-link:hover .github-icon {
+  /* Target icon within link on hover */
+  opacity: 0.7; /* Slight fade on hover */
+}
+
+.footer-text {
+  font-size: 1em; /* Make footer text slightly larger (relative to footer's 0.9em) */
+  line-height: 1.5; /* Improved line spacing */
 }

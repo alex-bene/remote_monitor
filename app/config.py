@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
-CONFIG_FILE_PATH = Path(__file__).parent / ".." / "machines.yaml"
+CONFIG_FILE_PATH = Path(__file__).parent / ".." / "config.yaml"
 
 
 class MonitoredHostConfig(BaseModel):
@@ -19,7 +19,8 @@ class MonitoredHostConfig(BaseModel):
 class AppConfig(BaseModel):
     """Structure for validating the configuration file."""
 
-    jump_host: str
+    page_title: str = Field(default="Remote Monitor")  # Added page title
+    jump_host: str | None = Field(default=None)  # Made jump_host optional
     monitored_hosts: list[MonitoredHostConfig] = Field(default_factory=list)
     refresh_interval_no_clients_sec: int = Field(
         default=900, ge=60
@@ -30,7 +31,7 @@ class AppConfig(BaseModel):
 
 
 def load_config() -> AppConfig:
-    """Load and validate the configuration from machines.yaml."""
+    """Load and validate the configuration from config.yaml."""
     if not CONFIG_FILE_PATH.exists():
         msg = f"Configuration file not found: {CONFIG_FILE_PATH}"
         raise FileNotFoundError(msg)
@@ -51,6 +52,7 @@ def load_config() -> AppConfig:
 # Load config once on module import
 try:
     settings = load_config()
-except (FileNotFoundError, RuntimeError):
-    logger.exception("FATAL ERROR loading configuration")
-    settings = AppConfig(jump_host="passerelle", monitored_hosts=[])
+except (FileNotFoundError, RuntimeError, Exception) as e:  # Catch broader exceptions during initial load
+    logger.exception("FATAL ERROR loading configuration: %s", e)
+    # Provide minimal defaults if loading fails
+    settings = AppConfig(page_title="Remote Monitor (Error)", jump_host=None, monitored_hosts=[])

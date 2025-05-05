@@ -3,19 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Imagine Watcher</title>
+    <title>{{ page_title }}</title> {# Use variable from config #}
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
     <header>
-        <h1>Imagine Watcher</h1>
-        <div id="last-updated">Last updated: Never</div>
+        <h1>{{ page_title }}</h1> {# Use variable from config #}
+        <div id="last-updated">
+            <span id="timestamp-prefix">Last updated: </span><span id="timestamp-value">Never</span>
+            <span class="auto-refresh-note"> | Auto-refreshing every minute</span>
+        </div>
     </header>
 
     <main>
         <div id="jump-host-status" class="host-card status-checking">
             <span class="hostname">Loading...</span>
-            <span class="status-indicator">Checking...</span>
+            <span class="status-indicator"></span>
             <div class="details">
                 <p class="error-message"></p>
                 <!-- Jump host metrics could be added here if needed -->
@@ -46,7 +49,17 @@
     </main>
 
     <footer>
-        <p>Auto-refreshing every minute</p>
+        <div class="footer-info">
+            <a href="https://github.com/alex-bene/remote_monitor" target="_blank" rel="noopener noreferrer" class="github-link">
+                <img src="/static/assets/github-mark.svg" alt="GitHub Icon" class="github-icon">
+            </a>
+            <div class="footer-text">
+                This is an open-source project — fork it, use it, break it, improve it.<br>
+                Found a bug or got an idea? Issues and PRs are welcome!<br>
+                If it helped you out, consider starring the repo ⭐<br>
+                Licensed under MIT — do what you want, just don’t blame us if it explodes 🔥
+            </div>
+        </div>
     <!-- Template for a monitored host table row (used by JavaScript) -->
     <template id="host-row-template">
         <tr class="host-row">
@@ -65,23 +78,6 @@
                 </div>
             </td>
         </tr>
-    </template>
-
-    <!-- Template for GPU info within the expandable row (used by JavaScript) -->
-    <template id="gpu-detail-template">
-        <div class="gpu-detail-card">
-            <h4>GPU <span class="gpu-index"></span>: <span class="gpu-name"></span></h4>
-            <p>Util: <span class="gpu-util">N/A</span>% | Mem: <span class="gpu-mem-used">N/A</span> / <span class="gpu-mem-total">N/A</span> GiB</p> <!-- Changed to GiB -->
-            <div class="gpu-processes">
-                <h5>Processes:</h5>
-                <ul></ul>
-            </div>
-        </div>
-    </template>
-
-     <!-- Template for GPU process (used by JavaScript) -->
-     <template id="gpu-process-template">
-        <li>PID: <span class="proc-pid"></span> (<span class="proc-cmd"></span>) - <span class="proc-mem"></span> MiB</li>
     </template>
 
     <script src="/static/js/script.js"></script>

@@ -100,54 +100,78 @@ def parse_nvidia_smi_csv(csv_output: str, expected_keys: list[str], warn_on_empt
             )
             continue
         try:
-            items.append(
-                {
-                    key: int(value) if "name" not in key else value
-                    for key, value in zip(expected_keys, values, strict=True)
-                }
-            )
-        except (ValueError, KeyError, IndexError):
+            item_data = {}
+            for key, value in zip(expected_keys, values, strict=True):
+                # Handle specific type conversions
+                if key in ["power.limit", "power.draw"]:
+                    item_data[key] = float(value)
+                elif key in ["name", "process_name"]:  # Handle GPU name and process name as strings
+                    item_data[key] = value
+                else:  # Assume int for others (index, pid, utilization, memory, temp, used_gpu_memory)
+                    item_data[key] = int(value)
+            items.append(item_data)
+        except (ValueError, KeyError, IndexError, TypeError):
             logger.exception("Error parsing nvidia-smi GPU line %d: %s.", i + 1, line)
     return items
 
 
-def parse_gpu_info(gpu_query_output: str | None, process_query_output: str | None) -> list[GpuInfo] | None:
-    """Combine GPU and Process parsing into a list of GpuInfo objects."""
+def parse_gpu_info(
+    gpu_query_output: str | None, per_gpu_process_output: dict[int, str | None] | None
+) -> list[GpuInfo] | None:
+    """Combine GPU and Process parsing into a list of GpuInfo objects, using per-GPU process data."""
     if not gpu_query_output:
-        # If no GPUs reported by the main query, return None or empty list?
         # Let's return None to indicate GPU info wasn't available/parsed.
         return None
 
     gpu_list_data = parse_nvidia_smi_csv(
         csv_output=gpu_query_output,
-        expected_keys=["index", "name", "utilization.gpu", "memory.used", "memory.total"],
+        expected_keys=[
+            "index",
+            "name",
+            "utilization.gpu",
+            "memory.used",
+            "memory.total",
+            "temperature.gpu",
+            "power.limit",
+            "power.draw",
+        ],  # Added new keys
         warn_on_empty=True,
     )
     if not gpu_list_data:
         return None  # Parsing failed or no GPUs found
 
-    process_list_data = []
-    if process_query_output:
-        process_list_data = parse_nvidia_smi_csv(
-            csv_output=process_query_output,
-            expected_keys=["pid", "process_name", "used_gpu_memory"],
-            warn_on_empty=False,
-        )
-
-    # Create GpuInfo objects and add processes (this assumes process query doesn't map directly to GPU index easily)
-    # nvidia-smi process query doesn't directly give GPU index easily in older versions.
-    # We'll attach *all* GPU processes found to *each* GPU for simplicity for now.
-    # A more advanced approach might involve querying process details separately or using newer nvidia-smi features.
     gpu_infos = []
     for gpu_data in gpu_list_data:
+        processes = []
+        current_gpu_index = gpu_data.get("index")
+
+        if current_gpu_index is not None and per_gpu_process_output:
+            # Get the specific process output string for this GPU index
+            specific_process_output = per_gpu_process_output.get(current_gpu_index)
+
+            if specific_process_output is not None:  # Check if query was successful (even if empty)
+                # Parse the process data *only* for this GPU
+                process_list_data_for_gpu = parse_nvidia_smi_csv(
+                    csv_output=specific_process_output,
+                    expected_keys=["pid", "process_name", "used_gpu_memory"],  # Original keys
+                    warn_on_empty=False,  # Don't warn if a specific GPU has no processes
+                )
+                # Create ProcessInfo objects from the parsed data for this GPU
+                try:
+                    processes = [ProcessInfo(**proc_data) for proc_data in process_list_data_for_gpu]
+                except Exception:
+                    logger.exception("Error creating ProcessInfo objects for GPU %s", current_gpu_index)
+            else:
+                logger.warning(
+                    "Process query failed or was skipped for GPU %s, processes will be empty.", current_gpu_index
+                )
+
         try:
-            # Create ProcessInfo objects from the parsed process data
-            processes = [ProcessInfo(**proc_data) for proc_data in process_list_data]
             # Create GpuInfo object, Pydantic handles alias mapping
             gpu_info = GpuInfo(**gpu_data, processes=processes)
             gpu_infos.append(gpu_info)
         except Exception:  # Catch potential Pydantic validation errors too
-            logger.exception("Error creating GpuInfo/ProcessInfo object for GPU %s", gpu_data.get("index", "N/A"))
+            logger.exception("Error creating GpuInfo object for GPU %s", gpu_data.get("index", "N/A"))
 
     return gpu_infos if gpu_infos else None
 

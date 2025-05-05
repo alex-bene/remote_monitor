@@ -18,6 +18,7 @@ class StatusCache:
         self.latest_status_data: dict | None = None
         self.latest_status_timestamp: str | None = None
         self.connected_clients: set[asyncio.Queue] = set()
+        self.client_activity_event = asyncio.Event()
 
     def update_status(self, data: dict, timestamp: str):
         self.latest_status_data = data
@@ -32,6 +33,7 @@ class StatusCache:
     def add_client(self, queue: asyncio.Queue):
         self.connected_clients.add(queue)
         logger.info("Client connected to SSE. Added to set. Total clients: %d", len(self.connected_clients))
+        self.client_activity_event.set()
 
     def remove_client(self, queue: asyncio.Queue):
         if queue in self.connected_clients:
@@ -59,14 +61,27 @@ async def periodic_status_fetch() -> None:
 
     while True:
         try:
-            # 1. Check Jump Host first
             jump_host = config.settings.jump_host
-            jump_host_status = await check_host_concurrently(jump_host)
-
+            jump_host_status: models.HostStatus | None = None
             monitored_hosts_status = []
-            # 2. If Jump Host is up, check monitored hosts concurrently
-            if jump_host_status.status == "up":
-                monitored_hosts_config = config.settings.monitored_hosts
+            monitored_hosts_config = config.settings.monitored_hosts
+
+            # 1. Check Jump Host if configured
+            if jump_host:
+                logger.info("Checking jump host: %s", jump_host)
+                jump_host_status = await check_host_concurrently(jump_host)
+            else:
+                logger.info("No jump host configured, skipping jump host check.")
+                jump_host_status = None  # Explicitly set to None
+
+            # 2. Check monitored hosts
+            # Proceed if jump host is up OR if no jump host is configured
+            if jump_host_status is None or jump_host_status.status == "up":
+                if jump_host_status:
+                    logger.info("Jump host is up. Checking monitored hosts.")
+                else:
+                    logger.info("No jump host configured. Checking monitored hosts directly.")
+
                 if monitored_hosts_config:
                     tasks = [check_host_concurrently(host_config) for host_config in monitored_hosts_config]
                     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -78,14 +93,24 @@ async def periodic_status_fetch() -> None:
                             monitored_hosts_status.append(result)
                         else:
                             logger.error("Unexpected result type from asyncio.gather: %s", type(result))
-            else:
+                else:
+                    logger.info("No monitored hosts configured.")
+            # 3. Handle case where jump host is configured but down
+            elif jump_host and jump_host_status and jump_host_status.status != "up":
+                logger.warning("Jump host %s is down or has errors. Skipping monitored hosts.", jump_host)
+                error_msg = f"{jump_host} down"  # Use actual jump host name
                 monitored_hosts_status = [
-                    models.HostStatus(hostname=host_config.hostname, status="skipped", error_message="Jump host down")
-                    for host_config in config.settings.monitored_hosts
+                    models.HostStatus(hostname=host_config.hostname, status="skipped", error_message=error_msg)
+                    for host_config in monitored_hosts_config
                 ]
+            # Should not happen, but safety net
+            else:
+                logger.error("Unexpected state in periodic_status_fetch logic.")
+                monitored_hosts_status = []
 
             response_data = models.ApiResponse(
-                jump_host_status=jump_host_status, monitored_hosts_status=monitored_hosts_status
+                jump_host_status=jump_host_status,  # Will be None if no jump host
+                monitored_hosts_status=monitored_hosts_status,
             )
 
             # Update global latest data
@@ -102,17 +127,34 @@ async def periodic_status_fetch() -> None:
             await status_cache.broadcast(sse_message)
 
         except Exception:
-            logger.exception("Error in periodic status fetch task")
+            logger.exception("Error in periodic status fetch task's data retrieval/broadcast")
 
-        # Determine sleep interval based on connected clients
-        if status_cache.connected_clients:
-            sleep_interval = config.settings.refresh_interval_clients_sec
-            logger.info("Clients connected, sleeping for %d seconds (K)", sleep_interval)
-        else:
-            sleep_interval = config.settings.refresh_interval_no_clients_sec
-            logger.info("No clients connected, sleeping for %d seconds (N)", sleep_interval)
+        try:
+            if status_cache.connected_clients:
+                sleep_interval = config.settings.refresh_interval_clients_sec
+                log_msg = "Clients connected, sleeping for up to %d seconds (K)"
+            else:
+                sleep_interval = config.settings.refresh_interval_no_clients_sec
+                log_msg = "No clients connected, sleeping for up to %d seconds (N)"
+            logger.info(log_msg, sleep_interval)
 
-        await asyncio.sleep(sleep_interval)
+            # Clear the event *before* waiting
+            status_cache.client_activity_event.clear()
+
+            try:
+                # Wait for the event OR timeout after sleep_interval
+                await asyncio.wait_for(status_cache.client_activity_event.wait(), timeout=sleep_interval)
+                # If we get here, the event was set (client activity)
+                logger.info("Client activity detected, interrupting sleep.")
+            except TimeoutError:
+                # If we get here, the timeout occurred (no client activity)
+                logger.debug("Sleep interval of %d seconds completed without client activity.", sleep_interval)
+            # --- End of wait logic ---
+
+        except Exception:
+            logger.exception("Error during sleep/wait logic in periodic status fetch")
+            # Fallback sleep to prevent tight loop on unexpected error in sleep logic
+            await asyncio.sleep(60)  # Sleep briefly before next loop iteration
 
 
 @router.get("/api/status_sse")
@@ -186,19 +228,32 @@ async def get_status() -> models.ApiResponse:
     """Get the status of all hosts."""
     logger.info("Received request for /api/status")
 
-    # 1. Check Jump Host first
     jump_host = config.settings.jump_host
-    logger.info("Checking jump host: %s", jump_host)
-    jump_host_status = await check_host_concurrently(jump_host)  # Use concurrent check
+    jump_host_status: models.HostStatus | None = None
+    monitored_hosts_status = []
+    monitored_hosts_config = config.settings.monitored_hosts
 
-    # 2. If Jump Host is up, check monitored hosts concurrently
-    if jump_host_status.status == "down":
-        monitored_hosts_status = []
-        monitored_hosts_config = config.settings.monitored_hosts
-        logger.info("Jump host is up. Checking monitored hosts: %s", [h.hostname for h in monitored_hosts_config])
+    # 1. Check Jump Host if configured
+    if jump_host:
+        logger.info("Checking jump host: %s", jump_host)
+        jump_host_status = await check_host_concurrently(jump_host)
+    else:
+        logger.info("No jump host configured, skipping jump host check.")
+        jump_host_status = None  # Explicitly set to None
+
+    # 2. Check monitored hosts
+    # Proceed if jump host is up OR if no jump host is configured
+    if jump_host_status is None or jump_host_status.status == "up":
+        if jump_host_status:
+            logger.info("Jump host is up. Checking monitored hosts: %s", [h.hostname for h in monitored_hosts_config])
+        else:
+            logger.info(
+                "No jump host configured. Checking monitored hosts directly: %s",
+                [h.hostname for h in monitored_hosts_config],
+            )
 
         if monitored_hosts_config:
-            # Create tasks for checking each monitored host, passing the full config object
+            # Create tasks for checking each monitored host
             tasks = [check_host_concurrently(host_config) for host_config in monitored_hosts_config]
             # Run tasks concurrently and gather results
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -214,15 +269,23 @@ async def get_status() -> models.ApiResponse:
                     logger.error("Unexpected result type from asyncio.gather: %s", type(result))
         else:
             logger.info("No monitored hosts configured.")
-    else:
+    # 3. Handle case where jump host is configured but down
+    elif jump_host and jump_host_status and jump_host_status.status != "up":
         logger.warning("Jump host %s is down or has errors. Skipping monitored hosts.", jump_host)
-        # Create 'skipped' status for monitored hosts if jump host is down
+        error_msg = f"{jump_host} down"  # Use actual jump host name
         monitored_hosts_status = [
-            models.HostStatus(hostname=host_config.hostname, status="skipped", error_message="Passerelle down")
-            for host_config in config.settings.monitored_hosts
+            models.HostStatus(hostname=host_config.hostname, status="skipped", error_message=error_msg)
+            for host_config in monitored_hosts_config
         ]
+    # Should not happen, but safety net
+    else:
+        logger.error("Unexpected state in get_status logic.")
+        monitored_hosts_status = []
 
-    response_data = models.ApiResponse(jump_host_status=jump_host_status, monitored_hosts_status=monitored_hosts_status)
+    response_data = models.ApiResponse(
+        jump_host_status=jump_host_status,  # Will be None if no jump host
+        monitored_hosts_status=monitored_hosts_status,
+    )
     logger.info("Finished processing /api/status request.")
 
     return response_data
