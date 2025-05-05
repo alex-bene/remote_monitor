@@ -32,10 +32,10 @@ class AppConfig(BaseModel):
     host_details: dict[str, HostConnectionDetails] = Field(default_factory=dict)
     monitored_hosts: list[MonitoredHostConfig] = Field(default_factory=list)
     refresh_interval_no_clients_sec: int = Field(
-        default=900, ge=60
+        default=1800, ge=600
     )  # Fetch every N minutes when no clients (default 15 mins)
     refresh_interval_clients_sec: int = Field(
-        default=60, ge=30
+        default=300, ge=60
     )  # Fetch every K minutes when clients connected (default 1 min)
 
 

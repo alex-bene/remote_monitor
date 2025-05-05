@@ -5,9 +5,10 @@ Remote Monitor is a web application that monitors the status and metrics of remo
 ## Features
 
 - Monitor jump host status.
-- Monitor status and metrics (CPU, memory, GPU) of configured hosts via the jump host.
+- Monitor status (up/down) and metrics (CPU Usage, RAM Usage/Total, GPU Utilization/Memory/Temp/Power) of configured hosts.
+- Supports connecting to monitored hosts directly or via a specified jump host.
 - Real-time updates using Server-Sent Events (SSE).
-- Configurable data fetching intervals based on connected clients.
+- Configurable data fetching intervals (different intervals when clients are connected vs. not connected).
 
 ## Setup and Running
 
@@ -26,55 +27,106 @@ Remote Monitor is a web application that monitors the status and metrics of remo
     uv sync
     ```
 
-3.  **Configure monitored machines:**
+3.  **Configure Monitored Machines:**
 
-    Create or update the `machines.yaml` file in the root directory. For example:
+    Create or update the `config.yaml` file in the root directory. This file defines connection details and which hosts to monitor.
+
+    **Example `config.yaml`:**
 
     ```yaml
-    jump_host: your_jump_host_hostname_or_ip
+    page_title: "My Lab Monitor" # Optional: Title shown on the web page
+
+    # Optional: Define an alias for a jump host if needed
+    jump_host: "my-jump-box-alias"
+
+    # Define connection details for all hosts (jump and monitored)
+    # Keys are aliases used elsewhere in the config.
+    host_details:
+      my-jump-box-alias: # Details for the jump host
+        hostname: "jump.example.com" # Actual hostname or IP
+        user: "jumpuser"
+        # jump_host_alias: null # Jump host connects directly
+
+      gpu-server-1: # Details for a monitored host
+        hostname: "192.168.1.101"
+        user: "gpuadmin"
+        jump_host_alias: "my-jump-box-alias" # Connect via the jump host
+
+      cpu-node-5: # Details for another monitored host
+        hostname: "cpu5.internal.net"
+        user: "nodeuser"
+        jump_host_alias: "my-jump-box-alias" # Connect via the jump host
+
+    # List the hosts you want to actively monitor on the dashboard
     monitored_hosts:
-      - hostname: host1_hostname_or_ip
-        check_gpu: true # Set to true to check GPU metrics
-      - hostname: host2_hostname_or_ip
-        check_gpu: false
-    refresh_interval_no_clients_sec: 600 # Optional: Fetch interval when no clients are connected (default: 600 seconds)
-    refresh_interval_clients_sec: 60 # Optional: Fetch interval when clients are connected (default: 60 seconds)
+      - alias: "gpu-server-1" # Must match a key in host_details
+        check_gpu: true # Check GPU metrics for this host
+
+      - alias: "cpu-node-5" # Must match a key in host_details
+        check_gpu: false # Don't check GPU metrics
+
+    # Optional: Refresh intervals (defaults shown)
+    refresh_interval_no_clients_sec: 1800 # Default: 30 minutes
+    refresh_interval_clients_sec: 300 # Default: 5 minutes
     ```
 
-4.  **Ensure SSH access:**
+4.  **Set Up SSH Authentication:**
 
-    Make sure you have SSH access configured for the jump host and the monitored hosts from the jump host. Your SSH configuration (`~/.ssh/config`) should be set up correctly.
+    - The application uses an SSH private key to authenticate.
+    - Provide your **unencrypted** private key (e.g., the contents of `~/.ssh/id_rsa`) via the `SSH_PRIVATE_KEY` environment variable.
+    - **Security Note:** Ensure this environment variable is handled securely (e.g., using a `.env` file listed in `.gitignore`, or system-level secrets management). Do not commit the key to version control.
+    - Create a `.env` file in the project root:
+      ```dotenv
+      # .env
+      SSH_PRIVATE_KEY="-----BEGIN OPENSSH PRIVATE KEY-----
+      bdawhuslllawudDAWLHu3293hdfADA938dh99d3h3wwewwwwwwwwwwwwwdadawd3DDDDD...
+      ...your private key content...
+      -----END OPENSSH PRIVATE KEY-----"
+      ```
+    - Ensure the public key corresponding to this private key is added to the `~/.ssh/authorized_keys` file on the **jump host** (if used) and all **target monitored hosts** for the specified users.
 
-5.  **Run the application:**
+5.  **Run the Application:**
 
     ```bash
-    uvicorn app.main:app --reload
+    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
     ```
 
     The application will be available at `http://127.0.0.1:8000`.
 
-## Configuration
+6.  **Deployment:**
 
-The application is configured via the `machines.yaml` file.
+    For deployment to a server, use a `gunicord`
 
-- `jump_host`: The hostname or IP address of the jump host.
-- `monitored_hosts`: A list of hosts to monitor. Each host can have:
-  - `hostname`: The hostname or IP address of the monitored host.
-  - `check_gpu`: A boolean indicating whether to fetch GPU metrics (defaults to `true`).
-- `refresh_interval_no_clients_sec`: The interval (in seconds) for fetching data when no clients are connected to the SSE endpoint. Defaults to 600 seconds (10 minutes).
-- `refresh_interval_clients_sec`: The interval (in seconds) for fetching data when at least one client is connected to the SSE endpoint. Defaults to 60 seconds (1 minute).
+    ```bash
+    gunicorn -k uvicorn.workers.UvicornWorker app.main:app
+    ```
+
+## Configuration (`config.yaml`)
+
+- `page_title` (Optional): Sets the title displayed in the web browser tab. Defaults to "Remote Monitor".
+- `jump_host` (Optional): The **alias** (must be a key in `host_details`) of the host to use as a jump/bastion server. If omitted, hosts are connected to directly.
+- `host_details`: A dictionary where keys are unique **aliases** for your hosts (both jump and monitored). Each value is an object containing:
+  - `hostname`: The actual hostname or IP address of the machine.
+  - `user`: The username to use for the SSH connection.
+  - `jump_host_alias` (Optional): The **alias** of the jump host to use for connecting to _this_ specific host. If omitted or `null`, a direct connection is attempted.
+- `monitored_hosts`: A list of hosts to actively monitor and display on the dashboard. Each item is an object containing:
+  - `alias`: The **alias** of the host (must match a key in `host_details`).
+  - `check_gpu` (Optional): Boolean indicating whether to fetch GPU metrics (`nvidia-smi`). Defaults to `true`. Set to `false` if the host has no GPUs or you don't want to monitor them.
+- `refresh_interval_no_clients_sec` (Optional): Interval (seconds) for fetching data when no web clients are connected. Defaults to 1800 (30 minutes). Minimum 600.
+- `refresh_interval_clients_sec` (Optional): Interval (seconds) for fetching data when at least one web client is connected. Defaults to 300 (5 minutes). Minimum 60.
 
 ## Technologies Used
 
 - FastAPI: Web framework
 - uvicorn: ASGI server
 - uv: Dependency management
+- asyncssh: Asynchronous SSH client library
 - Jinja2: Templating engine
 - SSE (Server-Sent Events): For real-time updates
 - PyYAML: For configuration file parsing
-- Pydantic: For data validation
+- Pydantic: For data validation and settings management
+- python-dotenv: For loading environment variables (like `SSH_PRIVATE_KEY`)
 - asyncio: For asynchronous operations
-- SSH: For connecting to remote machines
 - HTML, CSS, JavaScript: For the frontend
 
 ## Contributing
