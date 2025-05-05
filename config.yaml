@@ -28,4 +28,4 @@ monitored_hosts:
 
 # Refresh interval for fetching status updates in seconds
 refresh_interval_no_clients_sec: 3600
-refresh_interval_clients_sec: 60
+refresh_interval_clients_sec: 120
