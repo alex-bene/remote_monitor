@@ -45,5 +45,5 @@ class HostStatus(BaseModel):
 class ApiResponse(BaseModel):
     """Structure of the main API response."""
 
-    jump_host_status: HostStatus | None = None  # Made optional
+    jump_host_status: HostStatus | None = None
     monitored_hosts_status: list[HostStatus]

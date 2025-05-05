@@ -1,8 +1,9 @@
-import asyncio  # Import asyncio
+import asyncio
 import logging
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.concurrency import asynccontextmanager
 from fastapi.responses import HTMLResponse
@@ -13,6 +14,8 @@ from . import (
     api,  # Import the API router
     config,  # Import config settings
 )
+
+load_dotenv()
 
 # Configure basic logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")

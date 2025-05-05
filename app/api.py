@@ -68,10 +68,13 @@ async def periodic_status_fetch() -> None:
 
             # 1. Check Jump Host if configured
             if jump_host:
-                logger.info("Checking jump host: %s", jump_host)
-                jump_host_status = await check_host_concurrently(jump_host)
+                logger.info("Checking jump host alias: %s", jump_host)
+                # Create a dummy MonitoredHostConfig for the jump host check
+                # Note: hostname in MonitoredHostConfig is used as the alias here
+                jump_host_config = config.MonitoredHostConfig(alias=jump_host, check_gpu=False)
+                jump_host_status = await check_host_concurrently(jump_host_config)
             else:
-                logger.info("No jump host configured, skipping jump host check.")
+                logger.info("No jump host alias configured, skipping jump host check.")
                 jump_host_status = None  # Explicitly set to None
 
             # 2. Check monitored hosts
@@ -100,7 +103,7 @@ async def periodic_status_fetch() -> None:
                 logger.warning("Jump host %s is down or has errors. Skipping monitored hosts.", jump_host)
                 error_msg = f"{jump_host} down"  # Use actual jump host name
                 monitored_hosts_status = [
-                    models.HostStatus(hostname=host_config.hostname, status="skipped", error_message=error_msg)
+                    models.HostStatus(hostname=host_config.alias, status="skipped", error_message=error_msg)
                     for host_config in monitored_hosts_config
                 ]
             # Should not happen, but safety net
@@ -108,9 +111,9 @@ async def periodic_status_fetch() -> None:
                 logger.error("Unexpected state in periodic_status_fetch logic.")
                 monitored_hosts_status = []
 
+            # Construct response data including jump host status
             response_data = models.ApiResponse(
-                jump_host_status=jump_host_status,  # Will be None if no jump host
-                monitored_hosts_status=monitored_hosts_status,
+                jump_host_status=jump_host_status, monitored_hosts_status=monitored_hosts_status
             )
 
             # Update global latest data
@@ -130,26 +133,37 @@ async def periodic_status_fetch() -> None:
             logger.exception("Error in periodic status fetch task's data retrieval/broadcast")
 
         try:
+            # Determine sleep interval and wait mode
             if status_cache.connected_clients:
                 sleep_interval = config.settings.refresh_interval_clients_sec
-                log_msg = "Clients connected, sleeping for up to %d seconds (K)"
+                is_long_wait = False
+                log_msg = "Clients connected, sleeping for %d seconds (K)"  # Not interruptible by event
             else:
                 sleep_interval = config.settings.refresh_interval_no_clients_sec
-                log_msg = "No clients connected, sleeping for up to %d seconds (N)"
+                is_long_wait = True
+                log_msg = "No clients connected, sleeping for up to %d seconds (N)"  # Interruptible by event
             logger.info(log_msg, sleep_interval)
 
-            # Clear the event *before* waiting
+            # Clear the event *before* waiting/sleeping
             status_cache.client_activity_event.clear()
 
             try:
-                # Wait for the event OR timeout after sleep_interval
-                await asyncio.wait_for(status_cache.client_activity_event.wait(), timeout=sleep_interval)
-                # If we get here, the event was set (client activity)
-                logger.info("Client activity detected, interrupting sleep.")
+                if is_long_wait:
+                    # Long wait: sleep, but allow interruption by client activity event
+                    logger.debug("Entering long wait (interruptible)...")
+                    await asyncio.wait_for(status_cache.client_activity_event.wait(), timeout=sleep_interval)
+                    # If wait_for completes without TimeoutError, the event was set.
+                    logger.info("Client activity detected during long wait, interrupting sleep.")
+                else:
+                    # Short wait: sleep for the fixed duration, ignore event for interruption
+                    logger.debug("Entering short wait (non-interruptible)...")
+                    await asyncio.sleep(sleep_interval)
+                    logger.debug("Short sleep interval of %d seconds completed.", sleep_interval)
+
             except TimeoutError:
-                # If we get here, the timeout occurred (no client activity)
-                logger.debug("Sleep interval of %d seconds completed without client activity.", sleep_interval)
-            # --- End of wait logic ---
+                # This only happens if wait_for timed out during a long wait
+                logger.debug("Long sleep interval of %d seconds completed without client activity.", sleep_interval)
+            # Note: No specific handling needed here if asyncio.sleep completes in the 'else' block.
 
         except Exception:
             logger.exception("Error during sleep/wait logic in periodic status fetch")
@@ -190,37 +204,20 @@ async def get_status_sse(_: Request) -> EventSourceResponse:
     return EventSourceResponse(event_publisher(), ping=15)
 
 
-# Update the type hint to accept either string or MonitoredHostConfig
-async def check_host_concurrently(host_identifier: str | config.MonitoredHostConfig) -> models.HostStatus:
-    """Run get_full_host_status in an async manner."""
-    # Note: get_full_host_status itself is synchronous because it uses
-    # subprocess.run(). Running it via asyncio.to_thread allows it
-    # not to block the main FastAPI event loop. For true async SSH,
-    # libraries like asyncssh would be needed, adding complexity.
-
-    # Determine the hostname and whether to check GPU based on input type
-    if isinstance(host_identifier, str):
-        hostname = host_identifier
-        # Create a dummy config object for the jump host, always check_gpu=False
-        host_config_for_metrics = config.MonitoredHostConfig(hostname=hostname, check_gpu=False)
-    elif isinstance(host_identifier, config.MonitoredHostConfig):
-        hostname = host_identifier.hostname
-        host_config_for_metrics = host_identifier
-    else:
-        # Should not happen with type hints, but good practice
-        logger.error("Invalid type passed to check_host_concurrently: %s", type(host_identifier))
-        return models.HostStatus(hostname="Unknown", status="error", error_message="Invalid host identifier type")
-
+# This function now directly calls the async metrics function
+# It expects a MonitoredHostConfig object directly
+async def check_host_concurrently(host_config: config.MonitoredHostConfig) -> models.HostStatus:
+    """Wrapper to call the async get_full_host_status and handle potential exceptions."""
+    host_alias = host_config.alias  # Use the correct attribute 'alias'
     try:
-        loop = asyncio.get_running_loop()
-        # Pass the created/received host_config object to get_full_host_status
-        status = await loop.run_in_executor(None, metrics.get_full_host_status, host_config_for_metrics)
-    except Exception as e:
-        logger.exception("Error running concurrent check for %s", hostname)
-        # Return an error status if the task itself fails unexpectedly
-        return models.HostStatus(hostname=hostname, status="error", error_message=f"Task execution failed: {e}")
-    else:
+        # Directly await the now asynchronous function from metrics.py
+        status = await metrics.get_full_host_status(host_config)
         return status
+    except Exception as e:
+        # Log the exception if the task itself fails unexpectedly
+        logger.exception("Error running check_host_concurrently for alias %s", host_alias)
+        # Return an error status
+        return models.HostStatus(hostname=host_alias, status="error", error_message=f"Task execution failed: {e}")
 
 
 @router.get("/api/status", response_model=models.ApiResponse)
@@ -235,21 +232,23 @@ async def get_status() -> models.ApiResponse:
 
     # 1. Check Jump Host if configured
     if jump_host:
-        logger.info("Checking jump host: %s", jump_host)
-        jump_host_status = await check_host_concurrently(jump_host)
+        logger.info("Checking jump host alias: %s", jump_host)
+        # Create a dummy MonitoredHostConfig for the jump host check
+        jump_host_config = config.MonitoredHostConfig(alias=jump_host, check_gpu=False)
+        jump_host_status = await check_host_concurrently(jump_host_config)
     else:
-        logger.info("No jump host configured, skipping jump host check.")
+        logger.info("No jump host alias configured, skipping jump host check.")
         jump_host_status = None  # Explicitly set to None
 
     # 2. Check monitored hosts
     # Proceed if jump host is up OR if no jump host is configured
     if jump_host_status is None or jump_host_status.status == "up":
         if jump_host_status:
-            logger.info("Jump host is up. Checking monitored hosts: %s", [h.hostname for h in monitored_hosts_config])
+            logger.info("Jump host is up. Checking monitored hosts: %s", [h.alias for h in monitored_hosts_config])
         else:
             logger.info(
                 "No jump host configured. Checking monitored hosts directly: %s",
-                [h.hostname for h in monitored_hosts_config],
+                [h.alias for h in monitored_hosts_config],
             )
 
         if monitored_hosts_config:
@@ -274,7 +273,7 @@ async def get_status() -> models.ApiResponse:
         logger.warning("Jump host %s is down or has errors. Skipping monitored hosts.", jump_host)
         error_msg = f"{jump_host} down"  # Use actual jump host name
         monitored_hosts_status = [
-            models.HostStatus(hostname=host_config.hostname, status="skipped", error_message=error_msg)
+            models.HostStatus(hostname=host_config.alias, status="skipped", error_message=error_msg)
             for host_config in monitored_hosts_config
         ]
     # Should not happen, but safety net
@@ -282,10 +281,8 @@ async def get_status() -> models.ApiResponse:
         logger.error("Unexpected state in get_status logic.")
         monitored_hosts_status = []
 
-    response_data = models.ApiResponse(
-        jump_host_status=jump_host_status,  # Will be None if no jump host
-        monitored_hosts_status=monitored_hosts_status,
-    )
+    # Construct response data including jump host status
+    response_data = models.ApiResponse(jump_host_status=jump_host_status, monitored_hosts_status=monitored_hosts_status)
     logger.info("Finished processing /api/status request.")
 
     return response_data

@@ -1,16 +1,29 @@
 # Configuration for the application
 page_title: "IMAGINE Machines Monitor" # Title displayed on the web page
 
-# The host used as a jump point to access other machines.
-# This host will be checked first. Set to null or omit if no jump host.
-jump_host: passerelle
+# Define host details here, mapping aliases to connection info
+host_details:
+  passerelle:
+    hostname: passerelle.enpc.fr
+    user: alexandros.benetatos@enpc.fr
+    # No jump host for the jump host itself
+  imagine:
+    hostname: imagine.enpc.fr
+    user: alexandros.benetatos@enpc.fr
+    jump_host_alias: passerelle # Reference the alias of the jump host
+  allier:
+    hostname: allier.enpc.fr
+    user: abenetatos
+    jump_host_alias: passerelle # Reference the alias of the jump host
 
-# List of hosts to monitor. Each item can be a string (for default settings)
-# or an object with 'hostname' and optional 'check_gpu' (defaulting to true).
+# List of hosts to monitor by alias (must match keys in host_details)
+## The host alias used as a jump point to access other machines.
+## Must match a key in host_details. Set to null or omit if no jump host.
+jump_host: passerelle
 monitored_hosts:
-  - hostname: imagine
+  - alias: imagine
     check_gpu: false # Do not check for GPUs on this host
-  - hostname: allier
+  - alias: allier
     check_gpu: true # Explicitly check for GPUs on this host
 
 # Refresh interval for fetching status updates in seconds

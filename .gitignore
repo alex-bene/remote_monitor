@@ -9,5 +9,5 @@ wheels/
 # Virtual environments
 .venv
 
-# Project-specific files
-machines.yaml
+# Misc
+.env
